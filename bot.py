@@ -50,7 +50,7 @@ def telegram_webhook():
 
         # الرد على ضغطة الزر في تيليجرام
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/answerCallbackQuery"
-        requests.post(url, json={"callback_query_id": callback["id"], "text": answer_text, "show_alert": True})
+        requests.post(f"https://api.telegram.org/bot8989095746:AAHOl9g15Yt-n8x9R0YgZEPdjhsZjhsKLw8/answerCallbackQuery", json={"callback_query_id": callback.get("id"), "text": answer_text})
         
         # تعديل رسالة البوت لإظهار أن الطلب تمت معالجته
         edit_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/editMessageCaption"
