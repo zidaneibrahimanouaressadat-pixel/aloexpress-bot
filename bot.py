@@ -5,6 +5,7 @@ import requests
 
 app = Flask(__name__)
 
+# بيانات البوت والملفات
 TELEGRAM_BOT_TOKEN = "8989095746:AAHOl9g15Yt-n8x9R0YgZEPdjhsZjhsKLw8"
 BALANCE_FILE = "balance_state.json"
 
@@ -23,58 +24,79 @@ def update_balance(amount_to_add):
     new_balance = current + amount_to_add
     data = {
         "balance": new_balance,
-        "last_updated": "2026-03-20"
+        "last_updated": "2026-09-20"
     }
     with open(BALANCE_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
     return new_balance
+
+def send_telegram_message(chat_id, text):
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML"
+    }
+    try:
+        requests.post(url, json=payload)
+    except Exception as e:
+        print("Error sending message:", e)
 
 @app.route("/", methods=["POST"])
 @app.route(f"/{TELEGRAM_BOT_TOKEN}", methods=["POST"])
 def telegram_webhook():
     try:
         update = request.get_json()
-        print("Incoming Update:", update)
-
-        if not update or "callback_query" not in update:
+        if not update:
             return "OK", 200
 
-        callback = update["callback_query"]
-        callback_data = callback.get("data")
-        chat_id = callback["message"]["chat"]["id"]
-        message_id = callback["message"]["message_id"]
+        # الاستجابة للرسائل النصية المباشرة بدلاً من الأزرار
+        if "message" in update and "text" in update["message"]:
+            message = update["message"]
+            chat_id = message["chat"]["id"]
+            text = message["text"].strip()
 
-        # إدارة العملات يدوياً بناءً على الزر المضغوط
-        if callback_data == "approve_100_coins":
-            new_bal = update_balance(100)
-            answer_text = f"✨ تم إضافة 100 عملة يدوياً. الرصيد الحالي: {new_bal}"
-        elif callback_data == "reject_order":
-            answer_text = "❌ تم رفض المعاملة يدوياً."
-        else:
-            answer_text = "⚠️ أمر غير معروف."
+            # 1. إذا كتبت "موافقة" أو "+100" أو "/approve"
+            if text in ["موافقة", "+100", "/approve"]:
+                new_bal = update_balance(100)
+                response_text = f"✨ <b>تمت الموافقة يدوياً!</b>\n➕ أُضيفت 100 عملة.\n💰 الرصيد الحالي: <b>{new_bal}</b>"
 
-        # 1. الرد على الزر لإيقاف دائرة التحميل
-        requests.post(
-            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/answerCallbackQuery",
-            json={"callback_query_id": callback.get("id"), "text": answer_text}
-        )
+            # 2. إذا أردت إضافة مبلغ محدد يدوياً (مثال: إضافة 250 أو /add 250)
+            elif text.startswith("إضافة") or text.startswith("/add"):
+                parts = text.split()
+                if len(parts) > 1 and parts[1].isdigit():
+                    amount = int(parts[1])
+                    new_bal = update_balance(amount)
+                    response_text = f"✅ <b>تمت الإضافة بنجاح!</b>\n➕ أُضيفت {amount} عملة.\n💰 الرصيد الحالي: <b>{new_bal}</b>"
+                else:
+                    response_text = "⚠️ يرجى تحديد المبلغ، مثال: <code>إضافة 150</code>"
 
-        # 2. تعديل الرسالة وإضافة التوقيع اليدوي
-        original_caption = callback["message"].get("caption", "")
-        updated_caption = original_caption + f"\n\n<b>[تمت المعاملة يدوياً]</b>"
+            # 3. إذا كتبت "الرصيد" أو "/balance"
+            elif text in ["الرصيد", "/balance"]:
+                current_bal = get_current_balance()
+                response_text = f"📊 <b>الرصيد الحالي في النظام:</b> <b>{current_bal}</b>"
 
-        requests.post(
-            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/editMessageCaption",
-            json={
-                "chat_id": chat_id,
-                "message_id": message_id,
-                "caption": updated_caption,
-                "parse_mode": "HTML"
-            }
-        )
+            # 4. إذا كتبت "رفض"
+            elif text in ["رفض", "/reject"]:
+                response_text = "❌ <b>تم رفض المعاملة يدوياً.</b>"
+
+            # 5. أمر البداية أو تعليمات الأوامر
+            elif text in ["/start", "/help", "التعليمات"]:
+                response_text = (
+                    "<b>مرحباً بك في نظام إدارة الرصيد اليدوي!</b>\n\n"
+                    "يمكنك التحكم واكتساب العملات عبر كتابة النص المباشر للبوت:\n"
+                    "• اكتب <code>موافقة</code> أو <code>+100</code> لإضافة 100 عملة فوراً.\n"
+                    "• اكتب <code>إضافة 500</code> لإضافة أي كمية تختارها.\n"
+                    "• اكتب <code>الرصيد</code> للتحقق من الرصيد الحقيقي.\n"
+                    "• اكتب <code>رفض</code> لتسجيل الرفض."
+                )
+            else:
+                response_text = f"مرحباً! أرسلت: <i>{text}</i>\nلإضافة 100 عملة اكتب: <code>موافقة</code>"
+
+            send_telegram_message(chat_id, response_text)
 
     except Exception as e:
-        print("Error processing update:", str(e))
+        print("Error processing message:", str(e))
 
     return "OK", 200
 
