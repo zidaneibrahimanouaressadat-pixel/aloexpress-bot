@@ -30,9 +30,13 @@ def update_balance(amount_to_add):
         json.dump(data, f, ensure_ascii=False, indent=4)
     return new_balance
 
+@app.route("/", methods=["POST"])
 @app.route(f"/{TELEGRAM_BOT_TOKEN}", methods=["POST"])
 def telegram_webhook():
     update = request.get_json()
+
+    if not update:
+        return "OK", 200
 
     if "callback_query" in update:
         callback = update["callback_query"]
